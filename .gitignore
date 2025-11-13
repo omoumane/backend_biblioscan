@@ -1,0 +1,19 @@
+# Ne pas suivre XAMPP
+htdocs/xampp/
+
+# Cache Python
+__pycache__/
+
+# Images temporaires
+*.jpg
+*.jpeg
+*.png
+
+# Modèles lourds IA
+*.pt
+
+# Environnements Python
+venv/
+
+# VSCode
+.vscode/
