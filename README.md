@@ -18,14 +18,19 @@ Ce dépôt contient :
 ## 🏗️ Architecture générale
 
 backend_biblioscan/
-├── ai_services/          # Services IA en Python (analyse de documents, etc.)
-│   ├── <app.py>          # Point d'entrée (exemple)
-│   ├── <models/>         # Modèles IA entraînés / scripts ML
-├── htdocs/               # Backend PHP exposé par le serveur web
-│   ├── api/              # Endpoints API
-│   ├── config/           # Fichiers de configuration
-│   ├── public/           # Point d'entrée public (index.php, etc.)
-│   └── ...               # Autres fichiers PHP
+│
+├── ai_services/ # 🤖 Services IA (Python)
+│ ├── app.py # Point d'entrée IA
+│ ├── models/ # Modèles d'IA
+│ └── utils/ # Scripts utilitaires
+│
+├── htdocs/ # 🧩 Backend PHP (API)
+│ ├── bibliodb_api/ # Endpoints API
+│ │ ├── config.php # Configuration accès BD + IA
+│ │ ├── *.php # Scripts API
+│ ├── index.php # Page d'entrée
+│
+├── bibliodb.sql # 🗄️ Base de données MySQL
 ├── .gitignore
 └── README.md
 
@@ -35,7 +40,6 @@ Ouvrir XAMPP Control Panel.
   Démarrer les modules :
     ✔ Apache
     ✔ MySQL
-
 Les fichiers du backend doivent etre placés dans : C:/xampp/htdocs/biblidb_api/
 2- Lancer les AI Services (Python)
 Les fichiers du AI_Services etre placés dans : C:/xampp/ai_services
