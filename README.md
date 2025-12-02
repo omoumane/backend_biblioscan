@@ -303,13 +303,13 @@ Corps de la requette (JSON)
   "bibliotheques": [
     {
       "biblio_id": 8,
-      "nom": "hassan",
+      "nom": "Bibliotheque principale",
       "nb_lignes": 5,
       "nb_colonnes": 5
     },
     {
       "biblio_id": 13,
-      "nom": "ttt",
+      "nom": "bibliotheque petite chambre",
       "nb_lignes": 3,
       "nb_colonnes": 3
     }
@@ -317,4 +317,115 @@ Corps de la requette (JSON)
 }
 ```
 
-4- Liste des bibliothèques d’un utilisateur : lister_bib.php
+5- Suppression d’une bibliothèque : supprimer_bib.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de supprimer une bibliothèque dont il est propriétaire.
+
+La suppression utilise la contrainte ON DELETE CASCADE, donc tous les livres associés à cette bibliothèque sont automatiquement supprimés.
+
+📥 Requête
+
+URL : /bibliodb_api/supprimer_bib.php - Méthode : POST (en JSON) - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT biblio_id
+FROM bibliotheques
+WHERE biblio_id = ?
+  AND user_id = ?;
+```
+Corps de la requete (Input JSON)
+```text
+{
+  "biblio_id": 13
+}
+```
+6- Liste des livres d’une bibliothèque : voir_bib.php
+
+📌 Objectif
+
+Cet endpoint permet de récupérer tous les livres appartenant à une bibliothèque spécifique.
+
+La bibliothèque est identifiée par son biblio_id.
+
+📥 Requête
+
+URL : /bibliodb_api/get_livres.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT *
+FROM livres
+WHERE biblio_id = ?;
+```text
+Cette requête récupère tous les livres de la bibliothèque.
+
+Corps de la requete (Output JSON):
+```text
+[
+  {
+    "livre_id": 22,
+    "biblio_id": 8,
+    "titre": "Le Diable au Corps",
+    "auteur": "Raymond Radiguet",
+    "date_pub": "2022-10-05",
+    "position_ligne": 2,
+    "position_colonne": 3,
+    "couverture_url": "http://...",
+    "correction_manuelle": 0,
+    "isbn": "9782322458523"
+  },
+  {
+    "livre_id": 26,
+    "biblio_id": 8,
+    "titre": "La fin de l'histoire",
+    "auteur": "Luis Sepulveda",
+    "date_pub": "2020-04-23",
+    "position_ligne": 2,
+    "position_colonne": 3,
+    "couverture_url": "http://...",
+    "correction_manuelle": 0,
+    "isbn": "9791022606059"
+  }
+]
+```
+
+7- Ajout d’un livre manuellement : aj_livre.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié d’ajouter un livre dans une bibliothèque donnée.
+
+Les champs obligatoires sont :
+
+- le titre du livre,
+
+- l’auteur,
+
+- la date de publication,
+
+- la position dans la bibliothèque (ligne + colonne).
+
+📥 Requête
+
+URL : /bibliodb_api/aj_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+INSERT INTO livres (
+    biblio_id, titre, auteur, date_pub, position_ligne, position_colonne
+) VALUES (?, ?, ?, ?, ?, ?);
+```
+Corps de la requête (Input JSON)
+```text
+{
+  "biblio_id": 8,
+  "titre": "Le Petit Prince",
+  "auteur": "Antoine de Saint-Exupéry",
+  "date_pub": "1943",
+  "position_ligne": 1,
+  "position_colonne": 2
+}
+```
