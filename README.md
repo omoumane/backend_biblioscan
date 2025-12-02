@@ -429,3 +429,152 @@ Corps de la requête (Input JSON)
   "position_colonne": 2
 }
 ```
+
+8- Recherche de livres : chercher_livre.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de rechercher des livres dans toutes ses bibliothèques, avec filtres optionnels sur :
+
+- le titre,
+
+- l’auteur,
+
+- la date de publication.
+
+Tous les champs sont facultatifs.
+Si aucun filtre n’est donné, on retourne tous les livres de l’utilisateur.
+
+📥 Requête
+
+URL : /bibliodb_api/chercher_livre.php - Méthode : POST - Authentification : OUI (token obligatoire - Input : JSON - Output : JSON
+
+🧠 Logique & requêtes SQL
+```text
+SELECT l.*, b.nom AS nom_biblio
+FROM livres l
+JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE b.user_id = ?
+  AND l.titre LIKE ?
+  AND l.auteur LIKE ?
+  AND l.date_pub LIKE ?;
+```
+b.user_id = ? → garantit que l’utilisateur ne voit que ses propres livres.
+
+Filtres LIKE → recherche partielle (insensible à la longueur).
+
+Corps de la requête (Input JSON)
+
+Tous les champs sont optionnels :
+```text
+{
+  "titre": "Diable",
+  "auteur": "Radiguet",
+  "date_pub": "2022"
+}
+```
+
+Corps de la requête (Output JSON)
+```text
+{
+  "status": "success",
+  "livres": [
+    {
+      "livre_id": 22,
+      "biblio_id": 8,
+      "titre": "Le Diable au Corps",
+      "auteur": "Raymond Radiguet",
+      "date_pub": "2022-10-05",
+      "position_ligne": 2,
+      "position_colonne": 3,
+      "couverture_url": "...",
+      "correction_manuelle": 0,
+      "isbn": "9782322458523",
+      "nom_biblio": "Bibliotheque principale"
+    }
+  ]
+}
+```
+
+9- Mise à jour d’un livre : modifier_livre.php
+Cet endpoint permet à un utilisateur authentifié de modifier un livre qui lui appartient, avec :
+
+vérification que le livre appartient à l’utilisateur,
+
+possibilité de changer :
+
+- le titre
+
+- l’auteur
+
+- la date de publication
+
+- la position (ligne/colonne)
+
+- la bibliothèque (changer de biblio, mais seulement vers une bibliothèque à lui)
+
+📥 Requête
+
+URL : /bibliodb_api/update_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+- Vérification que le livre appartient à l’utilisateur
+```text
+SELECT l.livre_id
+FROM livres l
+INNER JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE l.livre_id = ? AND b.user_id = ?;
+```
+Empêche un déplacement vers une bibliothèque d’un autre utilisateur.
+
+- Construction dynamique de la requête UPDATE
+- 
+Seuls les champs envoyés sont mis à jour.
+
+Exemple de SQL générée :
+```text
+UPDATE livres 
+SET titre = ?, auteur = ?, date_pub = ?, position_ligne = ?, position_colonne = ?, biblio_id = ? 
+WHERE livre_id = ?;
+```
+
+Corps de la requête (Input JSON)
+```text
+{
+  "livre_id": 22,
+  "titre": "Le Diable au Corps",
+  "auteur": "Raymond Radiguet",
+  "date_pub": "1923",
+  "position_ligne": 2,
+  "position_colonne": 4,
+  "biblio_id": 13
+}
+```
+10- Suppression d'un livre : supprimer_livre.php
+
+Cet endpoint permet à un utilisateur authentifié de supprimer définitivement un livre.
+
+Avant la suppression, plusieurs contrôles sont effectués :
+
+- Vérifier que le token est valide
+
+- Vérifier que le livre existe
+
+- Vérifier que le livre appartient bien à une bibliothèque de l’utilisateur
+
+📥 Requête
+
+URL : /bibliodb_api/delete_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT l.livre_id
+FROM livres l
+INNER JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE l.livre_id = ? AND b.user_id = ?;
+```
+Empêche toute suppression d’un livre appartenant à un autre utilisateur.
+```text
+DELETE FROM livres WHERE livre_id = ?;
+```
+Suppression du livre
