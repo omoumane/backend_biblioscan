@@ -295,3 +295,26 @@ FROM bibliotheques
 WHERE user_id = ?;
 ```
 Cette requête récupère toutes les bibliothèques appartenant à l’utilisateur.
+
+Corps de la requette (JSON)
+```text
+{
+  "status": "success",
+  "bibliotheques": [
+    {
+      "biblio_id": 8,
+      "nom": "hassan",
+      "nb_lignes": 5,
+      "nb_colonnes": 5
+    },
+    {
+      "biblio_id": 13,
+      "nom": "ttt",
+      "nb_lignes": 3,
+      "nb_colonnes": 3
+    }
+  ]
+}
+```
+
+4- Liste des bibliothèques d’un utilisateur : lister_bib.php
