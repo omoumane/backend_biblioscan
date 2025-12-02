@@ -153,13 +153,13 @@ Cette table est le cœur du projet :
 Cet endpoint permet à un utilisateur de se connecter avec son username et son mot de passe.
 S’il est authentifié avec succès :
 
-les anciens tokens de cet utilisateur sont supprimés,
+- les anciens tokens de cet utilisateur sont supprimés,
 
-un nouveau token est généré,
+- un nouveau token est généré,
 
-ce token est sauvegardé dans la table user_tokens,
+- ce token est sauvegardé dans la table user_tokens,
 
-le backend renvoie ce token + l’user_id.
+- le backend renvoie ce token + l’user_id.
 
 📥 Requête
 
@@ -229,3 +229,69 @@ Insérer le nouvel utilisateur
 INSERT INTO users (username, password, nom, prenom)
 VALUES (?, ?, ?, ?);
 ```
+
+3-  Création d'une bibliotheque : aj_bib.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de créer une nouvelle bibliothèque virtuelle.
+Chaque bibliothèque possède :
+
+- un nom,
+
+- un nombre de lignes,
+
+- un nombre de colonnes,
+
+- et appartient à un user_id déterminé via token (verifyToken.php).
+
+ 📥 Requête
+
+URL : /bibliodb_api/aj_bib.php - Méthode : POST - Authentification : OUI (token obligatoire) - Input : JSON - Output : JSON
+
+🧠 Logique & requêtes SQL
+
+Authentification via verify_token.php
+
+Ce qui implique :
+
+- le client doit envoyer un token valide,
+
+- si le token est invalide ou expiré, user_id <= 0.
+
+Dans ce cas, la requête échouera plus tard car l’insertion dans la base va échouer.
+
+```text
+INSERT INTO bibliotheques (user_id, nom, nb_lignes, nb_colonnes)
+VALUES (?, ?, ?, ?);
+```
+Corps de la requete (JSON)
+```text
+{
+  "nom": "Bibliothèque principale",
+  "nb_lignes": 5,
+  "nb_colonnes": 4
+}
+```
+
+4- Liste des bibliothèques d’un utilisateur : lister_bib.php
+
+📌 Objectif
+
+Cet endpoint permet de récupérer toutes les bibliothèques appartenant à l’utilisateur connecté.
+
+L’utilisateur est identifié par son token, vérifié via verify_token.php.
+
+📥 Requête
+
+URL : /bibliodb_api/lister_bib.php - Méthode : GET - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+
+Une fois le user_id obtenu :
+```text
+SELECT biblio_id, nom, nb_lignes, nb_colonnes
+FROM bibliotheques
+WHERE user_id = ?;
+```
+Cette requête récupère toutes les bibliothèques appartenant à l’utilisateur.
