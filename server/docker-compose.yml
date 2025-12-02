@@ -1,0 +1,27 @@
+services:
+  biblioscan-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: biblioscan-server
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount debug_crops directory for debugging (optional)
+      - ./debug_crops:/app/debug_crops
+      # Mount models directory if you want to update models without rebuilding
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEVICE=cpu
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
