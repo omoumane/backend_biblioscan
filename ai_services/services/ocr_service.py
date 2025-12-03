@@ -1,7 +1,6 @@
 """OCR service for text recognition"""
 import sys
 import os
-import numpy as np
 
 # IMPORTANT: Patch langchain.docstore BEFORE any other imports
 # This must happen before PaddleOCR tries to import it
@@ -46,44 +45,11 @@ def _create_mock_langchain_modules():
         text_splitter_module.RecursiveCharacterTextSplitter = RecursiveCharacterTextSplitter
 
 # Create the mock modules
-_create_mock_langchain_modules()
+::_create_mock_langchain_modules()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
-# Fix for PaddleOCR compatibility with newer langchain versions
-def _patch_langchain_docstore():
-    """Patch langchain.docstore for PaddleOCR compatibility"""
-    try:
-        from types import ModuleType
-        
-        # Create the docstore module structure
-        docstore_module = ModuleType('langchain.docstore')
-        
-        # Create a Document class that paddlex expects
-        class Document:
-            def __init__(self, page_content="", metadata=None):
-                self.page_content = page_content
-                self.metadata = metadata or {}
-        
-        # Add Document to the module
-        docstore_module.Document = Document
-        docstore_module.document = Document
-        
-        # Register in sys.modules BEFORE any imports
-        sys.modules['langchain.docstore'] = docstore_module
-        sys.modules['langchain.docstore.document'] = Document
-        
-        # Also try to add to langchain if it exists
-        try:
-            import langchain
-            langchain.docstore = docstore_module
-        except:
-            pass
-            
-    except Exception as e:
-        # If patching fails, continue anyway
-        pass
 
 class OCRService:
     """Service for handling OCR operations"""
@@ -103,7 +69,7 @@ class OCRService:
             error_msg = str(e)
             if "No module named 'paddle'" in error_msg:
                 print(f" ⚠️  PaddleOCR not available: PaddlePaddle is not installed.")
-                print(f"     Note: PaddlePaddle may not support Python 3.14. Please use Python 3.11 or install paddlepaddle manually.")
+                print(f"     Note: PaddlePaddle may not support this Python version. Please install paddlepaddle manually.")
             else:
                 print(f" ⚠️  PaddleOCR not available: {e}")
             self.ocr = None
@@ -116,35 +82,77 @@ class OCRService:
             self._available = False
     
     def predict(self, image):
+        """
+        Run OCR prediction on an image.
 
+        Retourne un dict au format :
+        {
+            "rec_texts": [ "text1", "text2", ... ],
+            "rec_scores": [ 0.98, 0.91, ... ],
+            "rec_polys": [ [[x1,y1],...], ... ]
+        }
+        """
         if not self._available or self.ocr is None:
             raise RuntimeError("PaddleOCR is not available. Please install required dependencies.")
-
+        
+        # Appel PaddleOCR
         result = self.ocr.ocr(image, cls=True)
 
         rec_texts = []
         rec_scores = []
         rec_polys = []
 
-        for line in result:
-            for item in line:
-                try:
-                    box, (text, score) = item
-                    rec_polys.append(np.array(box, dtype=np.float32))
-                    rec_texts.append(text)
-                    rec_scores.append(float(score))
-                except Exception:
+        if result is None:
+            # Sécurité maximale : aucun texte
+            print("⚠ PaddleOCR a retourné None")
+            return {
+                "rec_texts": [],
+                "rec_scores": [],
+                "rec_polys": [],
+            }
+
+        # result est typiquement : [ [ [box, (text, score)], ... ] ]
+        for line in result or []:
+            if not line:
+                continue
+            # line doit être une liste de items
+            for item in (line or []):
+                # item = [box, (text, score)]
+                if not item or len(item) < 2:
+                    continue
+                box = item[0]
+                rec = item[1]
+
+                if box is None or rec is None:
                     continue
 
-        return [{
+                # rec = (text, score)
+                if not isinstance(rec, (list, tuple)) or len(rec) < 2:
+                    continue
+
+                text, score = rec[0], rec[1]
+
+                # Filtre minimal
+                if text is None:
+                    continue
+
+                try:
+                    score_f = float(score)
+                except Exception:
+                    score_f = 0.0
+
+                rec_polys.append(box)
+                rec_texts.append(str(text))
+                rec_scores.append(score_f)
+
+        return {
             "rec_texts": rec_texts,
             "rec_scores": rec_scores,
             "rec_polys": rec_polys,
-            "raw": result,
-        }]
+        }
 
 
-
+# Global OCR service instance
 try:
     ocr_service = OCRService()
 except Exception as e:
@@ -152,4 +160,3 @@ except Exception as e:
     # Create a dummy instance to prevent import errors
     ocr_service = OCRService()
     ocr_service._available = False
-
