@@ -40,4 +40,3 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 # OpenAI API key (optional, can be set via environment variable)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-

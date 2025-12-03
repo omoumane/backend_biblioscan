@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from dotenv import load_dotenv
 from openai import OpenAI
+import mysql.connector
 
 # =========================================================
 # 🌍 CONFIGURATION GÉNÉRALE
@@ -219,90 +220,44 @@ def search_google_books(query):
     }
 
 # =========================================================
-# 🧱 HOOKS ETL (Lotfi) — Désactivés par défaut
+# 🗄️ BASE DE DONNÉES SIMPLE
 # =========================================================
-ENABLE_DB = False  # 🔴 laisser False. Othmane mettra True + ses identifiants.
-db_config = {
-    "host": "127.0.0.1",
-    "user": "root",        # <-- à remplir
-    "password": "password",# <-- à remplir
-    "database": "bibliodb" # <-- à remplir
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "password": "",
+    "database": "bibliodb"
 }
 
-def create_db_connection():
-    """Retourne None si DB désactivée"""
-    if not ENABLE_DB:
-        print("ℹ DB désactivée (ENABLE_DB=False). Skip connexion.")
-        return None
+def insert_book(golden_record, biblio_id, ligne, col):
     try:
-        import mysql.connector
-        conn = mysql.connector.connect(**db_config)
-        return conn
-    except Exception as e:
-        print(f"❌ Erreur connexion MySQL : {e}")
-        return None
+        conn = mysql.connector.connect(**DB_CONFIG)
+        cursor = conn.cursor()
 
-def load_to_database(golden_record: dict, biblio_id: int, ligne: int, col: int):
-    """Insère/MàJ livre (doublons ISBN->titre). Ne fait rien si DB OFF."""
-    if not ENABLE_DB:
-        print("ℹ DB désactivée — LOAD ignoré.")
-        return
-    if not golden_record:
-        print("❌ Golden Record vide — LOAD annulé.")
-        return
+        sql = """
+        INSERT INTO livres
+          (biblio_id, titre, auteur, date_pub,
+           position_ligne, position_colonne,
+           couverture_url, isbn)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """
 
-    conn = create_db_connection()
-    if not conn:
-        print("❌ Connexion DB impossible.")
-        return
-    try:
-        cursor = conn.cursor(dictionary=True)
-        book_id = -1
+        cursor.execute(sql, (
+            biblio_id,
+            golden_record.get("titre"),
+            golden_record.get("auteur"),
+            golden_record.get("date_pub"),
+            ligne,
+            col,
+            golden_record.get("cover"),
+            golden_record.get("isbn"),
+        ))
 
-        if golden_record.get("isbn"):
-            cursor.execute("SELECT livre_id FROM livres WHERE isbn=%s", (golden_record["isbn"],))
-            r = cursor.fetchone()
-            if r:
-                book_id = r["livre_id"]
-
-        if book_id == -1:
-            cursor.execute(
-                "SELECT livre_id FROM livres WHERE titre=%s AND biblio_id=%s",
-                (golden_record["titre"], biblio_id)
-            )
-            r = cursor.fetchone()
-            if r:
-                book_id = r["livre_id"]
-
-        if book_id != -1:
-            cursor.execute(
-                "UPDATE livres SET biblio_id=%s, position_ligne=%s, position_colonne=%s WHERE livre_id=%s",
-                (biblio_id, ligne, col, book_id)
-            )
-        else:
-            cursor.execute(
-                """
-                INSERT INTO livres
-                  (biblio_id, titre, auteur, date_pub, position_ligne, position_colonne, couverture_url, isbn)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (
-                    biblio_id,
-                    golden_record.get("titre"),
-                    golden_record.get("auteur"),
-                    golden_record.get("date_pub"),
-                    ligne, col,
-                    golden_record.get("cover"),
-                    golden_record.get("isbn"),
-                )
-            )
         conn.commit()
+        print("✅ Livre inséré en BD :", golden_record.get("titre"))
+
     except Exception as e:
-        print(f"❌ Erreur LOAD DB : {e}")
-        try:
-            conn.rollback()
-        except:
-            pass
+        print("❌ Erreur insertion BD :", e)
     finally:
         try:
             cursor.close()
@@ -436,12 +391,11 @@ async def scan_and_enrich(
             "isbn": g.get("isbn")
         }
 
-        # Position : on fixe la ligne, on décale la colonne par idx
-        load_to_database(
+        insert_book(
             golden_record=golden_record,
             biblio_id=biblio_id,
             ligne=position_ligne,
-            col=position_colonne + idx
+            col=position_colonne
         )
 
         out_data.append({
@@ -527,16 +481,18 @@ async def index(request: Request):
                 return;
             }
 
+            // 🔥 TOUT est envoyé en FormData (file + 3 champs)
             var formData = new FormData();
             formData.append('file', file);
+            formData.append('biblio_id', biblio);
+            formData.append('position_ligne', posLigne);
+            formData.append('position_colonne', posCol);
 
             status.innerText = "⏳ Analyse en cours...";
             resultsDiv.innerHTML = "";
 
-            var url = '/scan_and_enrich'
-                + '?biblio_id=' + encodeURIComponent(biblio)
-                + '&position_ligne=' + encodeURIComponent(posLigne)
-                + '&position_colonne=' + encodeURIComponent(posCol);
+            // ❌ PLUS DE PARAMÈTRES DANS L’URL
+            var url = '/scan_and_enrich';
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', url, true);
@@ -559,48 +515,25 @@ async def index(request: Request):
 
                             if (data.results && data.results.length > 0) {
                                 for (var i = 0; i < data.results.length; i++) {
-                                    var b = data.results[i];
+                                    var b = data.results[i] || {};
+                                    var gb = b.google_books || {};
+
                                     html += "<div style='margin:20px auto;width:85%;background:white;padding:15px;border-radius:10px;text-align:left;box-shadow:0 2px 8px rgba(0,0,0,.06);'>";
-                                    html += "<h4>📘 " + ( 
-                                        (b.google_books && b.google_books.titre) ||
-                                        (b.metadata_extracted && b.metadata_extracted.titre) ||
-                                        b.llm_correction ||
-                                        "Titre inconnu"
-                                    ) + "</h4>";
 
-                                    html += "<p><b>OCR brut :</b> " + (b.ocr_text || "") + "</p>";
-                                    html += "<p><b>Correction :</b> " + (b.llm_correction || "") + "</p>";
+                                    var titre = gb.titre || "Titre inconnu";
+                                    html += "<h4>📘 " + titre + "</h4>";
 
-                                    if (b.metadata_extracted) {
-                                        html += "<p><b>Métadonnées (LLM) :</b> " +
-                                            (b.metadata_extracted.titre || "-") + " • " +
-                                            (b.metadata_extracted.auteur || "-") + " • " +
-                                            (b.metadata_extracted.collection || "-") + "</p>";
+                                    if (gb.auteurs && gb.auteurs.length > 0) {
+                                        html += "<p><b>Auteurs :</b> " + gb.auteurs.join(", ") + "</p>";
                                     }
-
-                                    html += "<p><b>Qualité OCR :</b> " + b.ocr_quality + " (" + b.ocr_confidence + "%)</p>";
-                                    html += "<p><b>Confiance YOLO :</b> " + b.yolo_confidence + "%</p>";
-                                    html += "<p><b>Validation :</b> " + (b.validation_result || "Inconnu") + "</p>";
-
-                                    html += "<div style='display:flex;gap:15px;flex-wrap:wrap;align-items:flex-start;'>";
-                                    if (b.crop_image) {
-                                        html += "<div><img src='" + b.crop_image + "?t=" + Date.now() + "' width='220'><br><small>Crop original</small></div>";
+                                    if (gb.isbn) {
+                                        html += "<p><b>ISBN :</b> " + gb.isbn + "</p>";
                                     }
-                                    if (b.crop_image_annotated) {
-                                        html += "<div><img src='" + b.crop_image_annotated + "?t=" + Date.now() + "' width='220'><br><small>OCR annoté</small></div>";
+                                    if (gb.date_pub) {
+                                        html += "<p><b>Date de publication :</b> " + gb.date_pub + "</p>";
                                     }
-                                    if (b.google_books && b.google_books.cover) {
-                                        html += "<div><img src='" + b.google_books.cover + "' width='120'><br><small>Couverture</small></div>";
-                                    }
-                                    html += "</div>";
-
-                                    if (b.google_books) {
-                                        if (b.google_books.auteurs && b.google_books.auteurs.length > 0) {
-                                            html += "<p><i>Auteurs : " + b.google_books.auteurs.join(", ") + "</i></p>";
-                                        }
-                                        if (b.google_books.isbn) {
-                                            html += "<p><b>ISBN :</b> " + b.google_books.isbn + "</p>";
-                                        }
+                                    if (gb.cover) {
+                                        html += "<div style='margin-top:10px;'><img src='" + gb.cover + "' width='120'><br><small>Couverture Google Books</small></div>";
                                     }
 
                                     html += "</div>";
@@ -639,4 +572,4 @@ async def index(request: Request):
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Serveur sur http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

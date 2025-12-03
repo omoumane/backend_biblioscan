@@ -1,6 +1,7 @@
 """OCR service for text recognition"""
 import sys
 import os
+import numpy as np
 
 # IMPORTANT: Patch langchain.docstore BEFORE any other imports
 # This must happen before PaddleOCR tries to import it
@@ -115,12 +116,35 @@ class OCRService:
             self._available = False
     
     def predict(self, image):
-        """Run OCR prediction on an image"""
+
         if not self._available or self.ocr is None:
             raise RuntimeError("PaddleOCR is not available. Please install required dependencies.")
-        return self.ocr.predict(image)
 
-# Global OCR service instance
+        result = self.ocr.ocr(image, cls=True)
+
+        rec_texts = []
+        rec_scores = []
+        rec_polys = []
+
+        for line in result:
+            for item in line:
+                try:
+                    box, (text, score) = item
+                    rec_polys.append(np.array(box, dtype=np.float32))
+                    rec_texts.append(text)
+                    rec_scores.append(float(score))
+                except Exception:
+                    continue
+
+        return [{
+            "rec_texts": rec_texts,
+            "rec_scores": rec_scores,
+            "rec_polys": rec_polys,
+            "raw": result,
+        }]
+
+
+
 try:
     ocr_service = OCRService()
 except Exception as e:
