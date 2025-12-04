@@ -4,6 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: biblioscan-server
+    # Run the container as the same user as on the host so that
+    # files created in mounted volumes (debug_crops, models, etc.)
+    # have the correct ownership and permissions.
+    user: "1000:1000"
     ports:
       - "8000:8000"
     volumes:
@@ -24,4 +28,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
