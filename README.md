@@ -1,1 +1,580 @@
-"# backend_biblioscan" 
+# 📚 backend_biblioscan
+
+Backend du projet **BiblioScan** : une plateforme permettant de gérer et d’analyser des documents de bibliothèque (scan, extraction, recherche, etc.).
+
+Ce dépôt contient :
+- Un backend applicatif (PHP, dossier `htdocs/`).
+- Des services d’intelligence artificielle (Python, dossier `ai_services/`).
+
+## 🧩 Fonctionnalités principales
+
+- Gestion des utilisateurs (inscription, connexion, authentification).
+- Gestion des bibliothèques (Ajout, Suppression, liste).
+- Gestion des livres (Ajout, Modification, Suppression, recherche, liste).
+- Analyse des documents via des services d’IA :
+  - <exemple : OCR, extraction de texte, résumé, classification, etc.>
+- API REST pour interaction avec un frontend ou des clients externes.
+
+## 🏗️ Architecture générale
+
+```text
+backend_biblioscan/
+│
+├── ai_services/                 #  Services IA (Python)
+│   ├── app.py                   # Point d'entrée IA
+│   ├── models/                  # Modèles d'IA
+│
+├── htdocs/                      #  Backend PHP (API)
+│   ├── bibliodb_api/            # Endpoints API
+│   │   ├── config.php           # Configuration accès BD + IA
+│
+├── bibliodb.sql                 # 🗄️ Base de données MySQL
+├── .gitignore
+└── README.md
+```
+
+## Comment lancer le serveur
+1- Démarrer le serveur XAMPP (Apache + MySQL)
+Ouvrir XAMPP Control Panel.
+  Démarrer les modules :
+    ✔ Apache
+    ✔ MySQL
+Les fichiers du backend doivent etre placés dans : C:/xampp/htdocs/biblidb_api/
+
+2- Lancer les AI Services (Python)
+Les fichiers du AI_Services etre placés dans : C:/xampp/ai_services
+Dans un terminal :
+    cd C:\xampp\ai_services
+    venv\Scripts\activate
+  // On devra voir : (venv) C:\xampp\ai_services>
+    uvicorn app:app --host 127.0.0.1 --port 8000 --root-path /ai
+    
+3- Lanche ngrok sur le port Ngrok:
+ngrok http --url=fancy-dog-formally.ngrok-free.app 80
+
+## Base de données : bibliodb
+La base de données bibliodb stocke toutes les informations nécessaires au fonctionnement du système Biblioscan :
+- gestion des utilisateurs
+- gestion des bibliothèques de livres
+- organisation spatiale des livres
+- gestion des sessions d’authentification
+
+Elle est composée de 4 tables principales :
+
+---- users
+```text
+| Champ      | Type                 | Description                         |
+| ---------- | -------------------- | ----------------------------------- |
+| `user_id`  | int(11), PK, AI      | Identifiant unique de l’utilisateur |
+| `username` | varchar(100), UNIQUE | Nom d’utilisateur (login)           |
+| `password` | varchar(255)         | Mot de passe hashé (bcrypt)         |
+| `nom`      | varchar(100)         | Nom de famille                      |
+| `prenom`   | varchar(100)         | Prénom                              |
+```
+📌 Rôle
+- Gestion des comptes
+- Authentification
+- Association des bibliothèques à un utilisateur (via bibliotheques.user_id)
+
+---- user_tokens
+```text
+| Champ        | Type                        | Description                            |
+| ------------ | --------------------------- | -------------------------------------- |
+| `id`         | int(11), PK, AI             | Identifiant unique du token            |
+| `user_id`    | int(11), FK → users.user_id | Utilisateur auquel appartient le token |
+| `token`      | varchar(255), UNIQUE        | Token généré (sécurisé)                |
+| `expires_at` | datetime                    | Date d’expiration                      |
+```
+📌 Rôle
+- Stockage des tokens JWT-like ou personnalisés
+- Système de session côté serveur
+- Permet de vérifier si un utilisateur est connecté ou non
+
+---- bibliotheques
+```text
+| Champ         | Type                        | Description                             |
+| ------------- | --------------------------- | --------------------------------------- |
+| `biblio_id`   | int(11), PK, AI             | Identifiant de la bibliothèque          |
+| `user_id`     | int(11), FK → users.user_id | Propriétaire                            |
+| `nom`         | varchar(100)                | Nom de la bibliothèque                  |
+| `nb_lignes`   | int(11)                     | Nombre de lignes de l’étagère virtuelle |
+| `nb_colonnes` | int(11)                     | Nombre de colonnes de l’étagère         |
+```
+📌 Rôle
+- Chaque utilisateur peut avoir plusieurs bibliothèques.
+- La position des livres est organisée en grille ligne/colonne, ce qui permet d’afficher une bibliothèque sous forme visuelle.
+
+---- livres
+```text
+| Champ                 | Type                                  | Description                                               |
+| --------------------- | ------------------------------------- | --------------------------------------------------------- |
+| `livre_id`            | int(11), PK, AI                       | Identifiant du livre                                      |
+| `biblio_id`           | int(11), FK → bibliotheques.biblio_id | Bibliothèque d’origine                                    |
+| `titre`               | varchar(255)                          | Titre du livre (OCR + correction automatique ou manuelle) |
+| `auteur`              | varchar(150)                          | Auteur                                                    |
+| `date_pub`            | varchar(50)                           | Année ou date de publication                              |
+| `position_ligne`      | int(11)                               | Ligne dans la grille de la bibliothèque                   |
+| `position_colonne`    | int(11)                               | Colonne dans la grille                                    |
+| `couverture_url`      | text                                  | URL de la couverture (Google Books)                       |
+| `correction_manuelle` | tinyint(1)                            | 0 = auto, 1 = corrigé par un humain                       |
+| `isbn`                | varchar(32)                           | ISBN si trouvé                                            |
+```
+📌 Rôle
+Cette table est le cœur du projet :
+- Sauvegarde des livres détectés via vision (OCR)
+- Correction automatique (IA Python)
+- Correction manuelle (interface utilisateur)
+- Organisation spatiale dans la bibliothèque (position_ligne / position_colonne)
+- Enrichissement via API Google Books (couverture_url, isbn, ...)
+
+## Relation entre les tables
+```text
+   users
+     │ 1
+     │
+     │ N
+ bibliotheques
+     │ 1
+     │
+     │ N
+   livres
+
+ users
+     │ 1
+     │
+     │ N
+ user_tokens
+```
+## API/PHP
+1-  Authentification : login.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur de se connecter avec son username et son mot de passe.
+S’il est authentifié avec succès :
+
+- les anciens tokens de cet utilisateur sont supprimés,
+
+- un nouveau token est généré,
+
+- ce token est sauvegardé dans la table user_tokens,
+
+- le backend renvoie ce token + l’user_id.
+
+📥 Requête
+
+URL : /bibliodb_api/login.php - Méthode : POST - Format d’entrée : application/json - Format de sortie : application/json
+
+🧠 Logique & requêtes SQL
+
+Récupérer l’utilisateur :
+```text
+SELECT user_id, password
+FROM users
+WHERE username = ?;
+```
+Vérifier le mot de passe (en PHP avec password_verify) :
+```text
+password_verify($password_entré, $row['password'])
+```
+Créer un token si OK :
+```text
+INSERT INTO user_tokens (user_id, token, expires_at)
+VALUES (?, ?, ?);
+```
+expires_at = date/heure actuelle + X heures/jours.
+
+2-  Inscription utilisateur : register.php
+
+📌 Objectif
+
+Cet endpoint permet de créer un nouveau compte utilisateur.
+
+- vérifie que tous les champs requis sont présents,
+
+- vérifie que le username n’est pas déjà utilisé,
+
+- hash le mot de passe (bcrypt),
+
+- insère un nouvel utilisateur dans la table users,
+
+- renvoie une réponse JSON indiquant le succès ou l’erreur.
+
+📥 Requête
+
+URL : /bibliodb_api/register.php - Méthode : POST - Input : JSON (application/json) - Output : JSON (application/json)
+
+🧠 Logique & requêtes SQL
+
+Lecture & nettoyage des données:
+```text
+$data = json_decode(file_get_contents("php://input"), true);
+$username = trim($data["username"] ?? '');
+$password = trim($data["password"] ?? '');
+$nom      = trim($data["nom"] ?? '');
+$prenom   = trim($data["prenom"] ?? '');
+```
+Hash du mot de passe
+```text
+$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+```
+Vérifier si le username existe déjà
+```text
+SELECT user_id
+FROM users
+WHERE username = ?;
+```
+Insérer le nouvel utilisateur
+```text
+INSERT INTO users (username, password, nom, prenom)
+VALUES (?, ?, ?, ?);
+```
+
+3-  Création d'une bibliotheque : aj_bib.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de créer une nouvelle bibliothèque virtuelle.
+Chaque bibliothèque possède :
+
+- un nom,
+
+- un nombre de lignes,
+
+- un nombre de colonnes,
+
+- et appartient à un user_id déterminé via token (verifyToken.php).
+
+ 📥 Requête
+
+URL : /bibliodb_api/aj_bib.php - Méthode : POST - Authentification : OUI (token obligatoire) - Input : JSON - Output : JSON
+
+🧠 Logique & requêtes SQL
+
+Authentification via verify_token.php
+
+Ce qui implique :
+
+- le client doit envoyer un token valide,
+
+- si le token est invalide ou expiré, user_id <= 0.
+
+Dans ce cas, la requête échouera plus tard car l’insertion dans la base va échouer.
+
+```text
+INSERT INTO bibliotheques (user_id, nom, nb_lignes, nb_colonnes)
+VALUES (?, ?, ?, ?);
+```
+Corps de la requete (JSON)
+```text
+{
+  "nom": "Bibliothèque principale",
+  "nb_lignes": 5,
+  "nb_colonnes": 4
+}
+```
+
+4- Liste des bibliothèques d’un utilisateur : lister_bib.php
+
+📌 Objectif
+
+Cet endpoint permet de récupérer toutes les bibliothèques appartenant à l’utilisateur connecté.
+
+L’utilisateur est identifié par son token, vérifié via verify_token.php.
+
+📥 Requête
+
+URL : /bibliodb_api/lister_bib.php - Méthode : GET - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+
+Une fois le user_id obtenu :
+```text
+SELECT biblio_id, nom, nb_lignes, nb_colonnes
+FROM bibliotheques
+WHERE user_id = ?;
+```
+Cette requête récupère toutes les bibliothèques appartenant à l’utilisateur.
+
+Corps de la requette (JSON)
+```text
+{
+  "status": "success",
+  "bibliotheques": [
+    {
+      "biblio_id": 8,
+      "nom": "Bibliotheque principale",
+      "nb_lignes": 5,
+      "nb_colonnes": 5
+    },
+    {
+      "biblio_id": 13,
+      "nom": "bibliotheque petite chambre",
+      "nb_lignes": 3,
+      "nb_colonnes": 3
+    }
+  ]
+}
+```
+
+5- Suppression d’une bibliothèque : supprimer_bib.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de supprimer une bibliothèque dont il est propriétaire.
+
+La suppression utilise la contrainte ON DELETE CASCADE, donc tous les livres associés à cette bibliothèque sont automatiquement supprimés.
+
+📥 Requête
+
+URL : /bibliodb_api/supprimer_bib.php - Méthode : POST (en JSON) - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT biblio_id
+FROM bibliotheques
+WHERE biblio_id = ?
+  AND user_id = ?;
+```
+Corps de la requete (Input JSON)
+```text
+{
+  "biblio_id": 13
+}
+```
+6- Liste des livres d’une bibliothèque : voir_bib.php
+
+📌 Objectif
+
+Cet endpoint permet de récupérer tous les livres appartenant à une bibliothèque spécifique.
+
+La bibliothèque est identifiée par son biblio_id.
+
+📥 Requête
+
+URL : /bibliodb_api/get_livres.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT *
+FROM livres
+WHERE biblio_id = ?;
+```text
+Cette requête récupère tous les livres de la bibliothèque.
+
+Corps de la requete (Output JSON):
+```text
+[
+  {
+    "livre_id": 22,
+    "biblio_id": 8,
+    "titre": "Le Diable au Corps",
+    "auteur": "Raymond Radiguet",
+    "date_pub": "2022-10-05",
+    "position_ligne": 2,
+    "position_colonne": 3,
+    "couverture_url": "http://...",
+    "correction_manuelle": 0,
+    "isbn": "9782322458523"
+  },
+  {
+    "livre_id": 26,
+    "biblio_id": 8,
+    "titre": "La fin de l'histoire",
+    "auteur": "Luis Sepulveda",
+    "date_pub": "2020-04-23",
+    "position_ligne": 2,
+    "position_colonne": 3,
+    "couverture_url": "http://...",
+    "correction_manuelle": 0,
+    "isbn": "9791022606059"
+  }
+]
+```
+
+7- Ajout d’un livre manuellement : aj_livre.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié d’ajouter un livre dans une bibliothèque donnée.
+
+Les champs obligatoires sont :
+
+- le titre du livre,
+
+- l’auteur,
+
+- la date de publication,
+
+- la position dans la bibliothèque (ligne + colonne).
+
+📥 Requête
+
+URL : /bibliodb_api/aj_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+INSERT INTO livres (
+    biblio_id, titre, auteur, date_pub, position_ligne, position_colonne
+) VALUES (?, ?, ?, ?, ?, ?);
+```
+Corps de la requête (Input JSON)
+```text
+{
+  "biblio_id": 8,
+  "titre": "Le Petit Prince",
+  "auteur": "Antoine de Saint-Exupéry",
+  "date_pub": "1943",
+  "position_ligne": 1,
+  "position_colonne": 2
+}
+```
+
+8- Recherche de livres : chercher_livre.php
+
+📌 Objectif
+
+Cet endpoint permet à un utilisateur authentifié de rechercher des livres dans toutes ses bibliothèques, avec filtres optionnels sur :
+
+- le titre,
+
+- l’auteur,
+
+- la date de publication.
+
+Tous les champs sont facultatifs.
+Si aucun filtre n’est donné, on retourne tous les livres de l’utilisateur.
+
+📥 Requête
+
+URL : /bibliodb_api/chercher_livre.php - Méthode : POST - Authentification : OUI (token obligatoire - Input : JSON - Output : JSON
+
+🧠 Logique & requêtes SQL
+```text
+SELECT l.*, b.nom AS nom_biblio
+FROM livres l
+JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE b.user_id = ?
+  AND l.titre LIKE ?
+  AND l.auteur LIKE ?
+  AND l.date_pub LIKE ?;
+```
+b.user_id = ? → garantit que l’utilisateur ne voit que ses propres livres.
+
+Filtres LIKE → recherche partielle (insensible à la longueur).
+
+Corps de la requête (Input JSON)
+
+Tous les champs sont optionnels :
+```text
+{
+  "titre": "Diable",
+  "auteur": "Radiguet",
+  "date_pub": "2022"
+}
+```
+
+Corps de la requête (Output JSON)
+```text
+{
+  "status": "success",
+  "livres": [
+    {
+      "livre_id": 22,
+      "biblio_id": 8,
+      "titre": "Le Diable au Corps",
+      "auteur": "Raymond Radiguet",
+      "date_pub": "2022-10-05",
+      "position_ligne": 2,
+      "position_colonne": 3,
+      "couverture_url": "...",
+      "correction_manuelle": 0,
+      "isbn": "9782322458523",
+      "nom_biblio": "Bibliotheque principale"
+    }
+  ]
+}
+```
+
+9- Mise à jour d’un livre : modifier_livre.php
+Cet endpoint permet à un utilisateur authentifié de modifier un livre qui lui appartient, avec :
+
+vérification que le livre appartient à l’utilisateur,
+
+possibilité de changer :
+
+- le titre
+
+- l’auteur
+
+- la date de publication
+
+- la position (ligne/colonne)
+
+- la bibliothèque (changer de biblio, mais seulement vers une bibliothèque à lui)
+
+📥 Requête
+
+URL : /bibliodb_api/update_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+- Vérification que le livre appartient à l’utilisateur
+```text
+SELECT l.livre_id
+FROM livres l
+INNER JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE l.livre_id = ? AND b.user_id = ?;
+```
+Empêche un déplacement vers une bibliothèque d’un autre utilisateur.
+
+- Construction dynamique de la requête UPDATE
+- 
+Seuls les champs envoyés sont mis à jour.
+
+Exemple de SQL générée :
+```text
+UPDATE livres 
+SET titre = ?, auteur = ?, date_pub = ?, position_ligne = ?, position_colonne = ?, biblio_id = ? 
+WHERE livre_id = ?;
+```
+
+Corps de la requête (Input JSON)
+```text
+{
+  "livre_id": 22,
+  "titre": "Le Diable au Corps",
+  "auteur": "Raymond Radiguet",
+  "date_pub": "1923",
+  "position_ligne": 2,
+  "position_colonne": 4,
+  "biblio_id": 13
+}
+```
+10- Suppression d'un livre : supprimer_livre.php
+
+Cet endpoint permet à un utilisateur authentifié de supprimer définitivement un livre.
+
+Avant la suppression, plusieurs contrôles sont effectués :
+
+- Vérifier que le token est valide
+
+- Vérifier que le livre existe
+
+- Vérifier que le livre appartient bien à une bibliothèque de l’utilisateur
+
+📥 Requête
+
+URL : /bibliodb_api/delete_livre.php - Méthode : POST - Authentification : OUI (token obligatoire)
+
+🧠 Logique & requêtes SQL
+```text
+SELECT l.livre_id
+FROM livres l
+INNER JOIN bibliotheques b ON l.biblio_id = b.biblio_id
+WHERE l.livre_id = ? AND b.user_id = ?;
+```
+Empêche toute suppression d’un livre appartenant à un autre utilisateur.
+```text
+DELETE FROM livres WHERE livre_id = ?;
+```
+Suppression du livre
